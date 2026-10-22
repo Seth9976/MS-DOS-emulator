@@ -1,0 +1,1045 @@
+/* ----------------------------------------------------------------------------
+	MAME i386
+---------------------------------------------------------------------------- */
+
+// disable warnings for Microsoft Visual C++ 2005 or later
+#if defined(_MSC_VER) && (_MSC_VER >= 1400)
+// for MAME i86/i386
+#pragma warning( disable : 4065 )
+#pragma warning( disable : 4146 )
+#pragma warning( disable : 4267 )
+#endif
+
+#ifndef __BIG_ENDIAN__
+#define LSB_FIRST
+#endif
+
+#ifndef INLINE
+#define INLINE inline
+#endif
+#if defined(_MSC_VER) && (_MSC_VER < 1400)
+#define S64(v) v##I64
+#define U64(v) v##UI64
+#else
+#define S64(v) v##LL
+#define U64(v) v##ULL
+#endif
+
+#ifdef _MSC_VC6
+void logerror(const char *format, ...)
+{
+//	va_list ap;
+//	va_start(ap, format);
+//	vfprintf(stderr, format, ap);
+//	va_end(ap);
+}
+void popmessage(const char *format, ...)
+{
+//	va_list ap;
+//	va_start(ap, format);
+//	vfprintf(stderr, format, ap);
+//	va_end(ap);
+}
+#else
+//#define logerror(...) fprintf(stderr, __VA_ARGS__)
+#define logerror(...)
+//#define popmessage(...) fprintf(stderr, __VA_ARGS__)
+#define popmessage(...)
+#endif
+
+/*****************************************************************************/
+/* src/emu/devcpu.h */
+
+// CPU interface functions
+#define CPU_INIT_NAME(name)			cpu_init_##name
+#define CPU_INIT(name)				void CPU_INIT_NAME(name)()
+#define CPU_INIT_CALL(name)			CPU_INIT_NAME(name)()
+
+#define CPU_RESET_NAME(name)			cpu_reset_##name
+#define CPU_RESET(name)				void CPU_RESET_NAME(name)()
+#define CPU_RESET_CALL(name)			CPU_RESET_NAME(name)()
+
+#define CPU_EXECUTE_NAME(name)			cpu_execute_##name
+#define CPU_EXECUTE(name)			void CPU_EXECUTE_NAME(name)()
+#define CPU_EXECUTE_CALL(name)			CPU_EXECUTE_NAME(name)()
+
+#define CPU_TRANSLATE_NAME(name)		cpu_translate_##name
+#define CPU_TRANSLATE(name)			int CPU_TRANSLATE_NAME(name)(address_spacenum space, int intention, offs_t *address)
+#define CPU_TRANSLATE_CALL(name)		CPU_TRANSLATE_NAME(name)(space, intention, address)
+
+#define CPU_DISASSEMBLE_NAME(name)		cpu_disassemble_##name
+#define CPU_DISASSEMBLE(name)			int CPU_DISASSEMBLE_NAME(name)(char *buffer, offs_t eip, const UINT8 *oprom)
+#define CPU_DISASSEMBLE_CALL(name)		CPU_DISASSEMBLE_NAME(name)(buffer, eip, oprom)
+
+#define CPU_MODEL_STR(name)			#name
+#define CPU_MODEL_NAME(name)			CPU_MODEL_STR(name)
+
+/*****************************************************************************/
+/* src/emu/didisasm.h */
+
+// Disassembler constants
+const UINT32 DASMFLAG_SUPPORTED     = 0x80000000;   // are disassembly flags supported?
+const UINT32 DASMFLAG_STEP_OUT      = 0x40000000;   // this instruction should be the end of a step out sequence
+const UINT32 DASMFLAG_STEP_OVER     = 0x20000000;   // this instruction should be stepped over by setting a breakpoint afterwards
+const UINT32 DASMFLAG_STEP_COND     = 0x10000000;   // this instruction should be stepped over by setting a breakpoint afterwards
+const UINT32 DASMFLAG_OVERINSTMASK  = 0x0c000000;   // number of extra instructions to skip when stepping over
+const UINT32 DASMFLAG_OVERINSTSHIFT = 26;           // bits to shift after masking to get the value
+const UINT32 DASMFLAG_LENGTHMASK    = 0x0000ffff;   // the low 16-bits contain the actual length
+
+/*****************************************************************************/
+/* src/emu/diexec.h */
+
+// I/O line states
+enum line_state
+{
+	CLEAR_LINE = 0,				// clear (a fired or held) line
+	ASSERT_LINE,				// assert an interrupt immediately
+	HOLD_LINE,				// hold interrupt line until acknowledged
+	PULSE_LINE				// pulse interrupt line instantaneously (only for NMI, RESET)
+};
+
+// I/O line definitions
+enum
+{
+	INPUT_LINE_IRQ = 0,
+	INPUT_LINE_NMI
+};
+
+/*****************************************************************************/
+/* src/emu/dimemory.h */
+/* src/emu/divtlb.h */
+
+// Translation intentions
+enum
+{
+	TR_READ  = 0,	// translate for read
+	TR_WRITE = 1,	// translate for write
+	TR_FETCH = 2	// translate for instruction fetch
+};
+
+enum
+{
+	TR_UREAD  = 4,	// TR_USER | TR_READ
+	TR_UWRITE = 5,	// TR_USER | TR_WRITE
+	TR_UFETCH = 6,	// TR_USER | TR_FETCH
+
+	TR_TYPE   = 3,	// read write or fetch
+	TR_USER   = 4	// user mode or fully privileged
+};
+
+/*****************************************************************************/
+/* src/emu/emucore.h */
+
+// constants for expression endianness
+enum endianness_t
+{
+	ENDIANNESS_LITTLE,
+	ENDIANNESS_BIG
+};
+
+// declare native endianness to be one or the other
+#ifdef LSB_FIRST
+const endianness_t ENDIANNESS_NATIVE = ENDIANNESS_LITTLE;
+#else
+const endianness_t ENDIANNESS_NATIVE = ENDIANNESS_BIG;
+#endif
+
+// endian-based value: first value is if 'endian' is little-endian, second is if 'endian' is big-endian
+#define ENDIAN_VALUE_LE_BE(endian,leval,beval)	(((endian) == ENDIANNESS_LITTLE) ? (leval) : (beval))
+
+// endian-based value: first value is if native endianness is little-endian, second is if native is big-endian
+#define NATIVE_ENDIAN_VALUE_LE_BE(leval,beval)	ENDIAN_VALUE_LE_BE(ENDIANNESS_NATIVE, leval, beval)
+
+// endian-based value: first value is if 'endian' matches native, second is if 'endian' doesn't match native
+#define ENDIAN_VALUE_NE_NNE(endian,leval,beval)	(((endian) == ENDIANNESS_NATIVE) ? (neval) : (nneval))
+
+/*****************************************************************************/
+/* src/emu/emumem.h */
+
+// helpers for checking address alignment
+#define WORD_ALIGNED(a)                 (((a) & 1) == 0)
+#define DWORD_ALIGNED(a)                (((a) & 3) == 0)
+#define QWORD_ALIGNED(a)                (((a) & 7) == 0)
+
+/*****************************************************************************/
+/* src/emu/memory.h */
+
+// address spaces
+enum address_spacenum
+{
+	AS_0,                           // first address space
+	AS_1,                           // second address space
+	AS_2,                           // third address space
+	AS_3,                           // fourth address space
+	ADDRESS_SPACES,                 // maximum number of address spaces
+
+	// alternate address space names for common use
+	AS_PROGRAM = AS_0,              // program address space
+	AS_DATA = AS_1,                 // data address space
+	AS_IO = AS_2                    // I/O address space
+};
+
+// offsets and addresses are 32-bit (for now...)
+typedef UINT32	offs_t;
+
+#define read_decrypted_byte read_byte
+#define read_decrypted_word read_word
+#define read_decrypted_dword read_dword
+
+#define read_raw_byte read_byte
+#define write_raw_byte write_byte
+
+#define read_word_unaligned read_word
+#define write_word_unaligned write_word
+
+#define read_io_word_unaligned read_io_word
+#define write_io_word_unaligned write_io_word
+
+/*****************************************************************************/
+/* src/osd/osdcomm.h */
+
+/* Highly useful macro for compile-time knowledge of an array size */
+#define ARRAY_LENGTH(x)     (sizeof(x) / sizeof(x[0]))
+
+static CPU_TRANSLATE(i386);
+
+#define SUPPORT_FPU_SOFTFLOAT3
+
+#ifdef SUPPORT_FPU_SOFTFLOAT3
+
+// definitions in stdin.h for Microsoft Visual C++ 2008 or prior
+#if defined(_MSC_VER) && (_MSC_VER < 1600)
+typedef unsigned char       uint8_t;
+typedef unsigned short      uint16_t;
+typedef unsigned int        uint32_t;
+typedef unsigned __int64    uint64_t;
+
+typedef unsigned char       uint_least8_t;
+typedef unsigned short      uint_least16_t;
+typedef unsigned int        uint_least32_t;
+typedef unsigned __int64    uint_least64_t;
+
+typedef unsigned int        uint_fast8_t;
+typedef unsigned int        uint_fast16_t;
+typedef unsigned int        uint_fast32_t;
+typedef unsigned __int64    uint_fast64_t;
+
+typedef signed char         int8_t;
+typedef signed short        int16_t;
+typedef signed int          int32_t;
+typedef signed __int64      int64_t;
+
+typedef signed char         int_least8_t;
+typedef signed short        int_least16_t;
+typedef signed int          int_least32_t;
+typedef signed __int64      int_least64_t;
+
+typedef signed int          int_fast8_t;
+typedef signed int          int_fast16_t;
+typedef signed int          int_fast32_t;
+typedef signed __int64      int_fast64_t;
+
+#define INT64_C(val)        val##I64
+#define UINT64_C(val)       val##UI64
+#else
+#include <stdint.h>
+#endif
+
+// disable warnings for Microsoft Visual C++ 2008 or prior
+#if defined(_MSC_VER) && (_MSC_VER < 1600)
+#pragma warning( disable : 4800 )
+#endif
+// disable global optimazation for Microsoft Visual C++ 6
+#if defined(_MSC_VER) && (_MSC_VER == 1200)
+#pragma optimize("g", off)
+#endif
+
+#define SOFTFLOAT_ROUND_ODD
+#define INLINE_LEVEL 5
+#define SOFTFLOAT_FAST_DIV32TO16
+#define SOFTFLOAT_FAST_DIV64TO32
+#define SOFTFLOAT_FAST_INT64
+
+//#include "mame/lib/softfloat3/source/s_eq128.c"
+//#include "mame/lib/softfloat3/source/s_le128.c"
+//#include "mame/lib/softfloat3/source/s_lt128.c"
+//#include "mame/lib/softfloat3/source/s_shortShiftLeft128.c"
+//#include "mame/lib/softfloat3/source/s_shortShiftRight128.c"
+//#include "mame/lib/softfloat3/source/s_shortShiftRightJam64.c"
+//#include "mame/lib/softfloat3/source/s_shortShiftRightJam64Extra.c"
+//#include "mame/lib/softfloat3/source/s_shortShiftRightJam128.c"
+//#include "mame/lib/softfloat3/source/s_shortShiftRightJam128Extra.c"
+//#include "mame/lib/softfloat3/source/s_shiftRightJam32.c"
+//#include "mame/lib/softfloat3/source/s_shiftRightJam64.c"
+//#include "mame/lib/softfloat3/source/s_shiftRightJam64Extra.c"
+#include "mame/lib/softfloat3/source/s_shiftRightJam128.c"
+#include "mame/lib/softfloat3/source/s_shiftRightJam128Extra.c"
+#include "mame/lib/softfloat3/source/s_shiftRightJam256M.c"
+#include "mame/lib/softfloat3/source/s_countLeadingZeros8.c"
+//#include "mame/lib/softfloat3/source/s_countLeadingZeros16.c"
+//#include "mame/lib/softfloat3/source/s_countLeadingZeros32.c"
+#include "mame/lib/softfloat3/source/s_countLeadingZeros64.c"
+//#include "mame/lib/softfloat3/source/s_add128.c"
+#include "mame/lib/softfloat3/source/s_add256M.c"
+//#include "mame/lib/softfloat3/source/s_sub128.c"
+#include "mame/lib/softfloat3/source/s_sub256M.c"
+//#include "mame/lib/softfloat3/source/s_mul64ByShifted32To128.c"
+#include "mame/lib/softfloat3/source/s_mul64To128.c"
+//#include "mame/lib/softfloat3/source/s_mul128By32.c"
+#include "mame/lib/softfloat3/source/s_mul128To256M.c"
+#include "mame/lib/softfloat3/source/s_approxRecip_1Ks.c"
+#include "mame/lib/softfloat3/source/s_approxRecip32_1.c"
+#include "mame/lib/softfloat3/source/s_approxRecipSqrt_1Ks.c"
+#include "mame/lib/softfloat3/source/s_approxRecipSqrt32_1.c"
+#include "mame/lib/softfloat3/source/8086/softfloat_raiseFlags.c"
+#include "mame/lib/softfloat3/source/8086/s_commonNaNToF16UI.c"
+#include "mame/lib/softfloat3/source/8086/s_propagateNaNF16UI.c"
+#include "mame/lib/softfloat3/source/8086/s_f32UIToCommonNaN.c"
+#include "mame/lib/softfloat3/source/8086/s_commonNaNToF32UI.c"
+#include "mame/lib/softfloat3/source/8086/s_propagateNaNF32UI.c"
+#include "mame/lib/softfloat3/source/8086/s_f64UIToCommonNaN.c"
+#include "mame/lib/softfloat3/source/8086/s_f16UIToCommonNaN.c"
+#include "mame/lib/softfloat3/source/8086/s_commonNaNToF64UI.c"
+#include "mame/lib/softfloat3/source/8086/s_propagateNaNF64UI.c"
+#include "mame/lib/softfloat3/source/8086/extF80M_isSignalingNaN.c"
+#include "mame/lib/softfloat3/source/8086/s_extF80UIToCommonNaN.c"
+#include "mame/lib/softfloat3/source/8086/s_commonNaNToExtF80UI.c"
+#include "mame/lib/softfloat3/source/8086/s_propagateNaNExtF80UI.c"
+#include "mame/lib/softfloat3/source/8086/f128M_isSignalingNaN.c"
+#include "mame/lib/softfloat3/source/8086/s_f128UIToCommonNaN.c"
+#include "mame/lib/softfloat3/source/8086/s_commonNaNToF128UI.c"
+#include "mame/lib/softfloat3/source/8086/s_propagateNaNF128UI.c"
+#include "mame/lib/softfloat3/source/s_roundToUI32.c"
+#include "mame/lib/softfloat3/source/s_roundToUI64.c"
+#include "mame/lib/softfloat3/source/s_roundToI32.c"
+#include "mame/lib/softfloat3/source/s_roundToI64.c"
+#include "mame/lib/softfloat3/source/s_normSubnormalF16Sig.c"
+#include "mame/lib/softfloat3/source/s_roundPackToF16.c"
+#include "mame/lib/softfloat3/source/s_normRoundPackToF16.c"
+#include "mame/lib/softfloat3/source/s_addMagsF16.c"
+#include "mame/lib/softfloat3/source/s_subMagsF16.c"
+#include "mame/lib/softfloat3/source/s_mulAddF16.c"
+#include "mame/lib/softfloat3/source/s_normSubnormalF32Sig.c"
+#include "mame/lib/softfloat3/source/s_roundPackToF32.c"
+#include "mame/lib/softfloat3/source/s_normRoundPackToF32.c"
+#include "mame/lib/softfloat3/source/s_addMagsF32.c"
+#include "mame/lib/softfloat3/source/s_subMagsF32.c"
+#include "mame/lib/softfloat3/source/s_mulAddF32.c"
+#include "mame/lib/softfloat3/source/s_normSubnormalF64Sig.c"
+#include "mame/lib/softfloat3/source/s_roundPackToF64.c"
+#include "mame/lib/softfloat3/source/s_normRoundPackToF64.c"
+#include "mame/lib/softfloat3/source/s_addMagsF64.c"
+#include "mame/lib/softfloat3/source/s_subMagsF64.c"
+#include "mame/lib/softfloat3/source/s_mulAddF64.c"
+#include "mame/lib/softfloat3/source/s_normSubnormalExtF80Sig.c"
+#include "mame/lib/softfloat3/source/s_roundPackToExtF80.c"
+#include "mame/lib/softfloat3/source/s_normRoundPackToExtF80.c"
+#include "mame/lib/softfloat3/source/s_addMagsExtF80.c"
+#include "mame/lib/softfloat3/source/s_subMagsExtF80.c"
+#include "mame/lib/softfloat3/source/s_normSubnormalF128Sig.c"
+#include "mame/lib/softfloat3/source/s_roundPackToF128.c"
+#include "mame/lib/softfloat3/source/s_normRoundPackToF128.c"
+#include "mame/lib/softfloat3/source/s_addMagsF128.c"
+#include "mame/lib/softfloat3/source/s_subMagsF128.c"
+#include "mame/lib/softfloat3/source/s_mulAddF128.c"
+#include "mame/lib/softfloat3/source/softfloat_state.c"
+#include "mame/lib/softfloat3/source/ui32_to_f16.c"
+#include "mame/lib/softfloat3/source/ui32_to_f32.c"
+#include "mame/lib/softfloat3/source/ui32_to_f64.c"
+#include "mame/lib/softfloat3/source/ui32_to_extF80.c"
+#include "mame/lib/softfloat3/source/ui32_to_extF80M.c"
+#include "mame/lib/softfloat3/source/ui32_to_f128.c"
+#include "mame/lib/softfloat3/source/ui32_to_f128M.c"
+#include "mame/lib/softfloat3/source/ui64_to_f16.c"
+#include "mame/lib/softfloat3/source/ui64_to_f32.c"
+#include "mame/lib/softfloat3/source/ui64_to_f64.c"
+#include "mame/lib/softfloat3/source/ui64_to_extF80.c"
+#include "mame/lib/softfloat3/source/ui64_to_extF80M.c"
+#include "mame/lib/softfloat3/source/ui64_to_f128.c"
+#include "mame/lib/softfloat3/source/ui64_to_f128M.c"
+#include "mame/lib/softfloat3/source/i32_to_f16.c"
+#include "mame/lib/softfloat3/source/i32_to_f32.c"
+#include "mame/lib/softfloat3/source/i32_to_f64.c"
+#include "mame/lib/softfloat3/source/i32_to_extF80.c"
+#include "mame/lib/softfloat3/source/i32_to_extF80M.c"
+#include "mame/lib/softfloat3/source/i32_to_f128.c"
+#include "mame/lib/softfloat3/source/i32_to_f128M.c"
+#include "mame/lib/softfloat3/source/i64_to_f16.c"
+#include "mame/lib/softfloat3/source/i64_to_f32.c"
+#include "mame/lib/softfloat3/source/i64_to_f64.c"
+#include "mame/lib/softfloat3/source/i64_to_extF80.c"
+#include "mame/lib/softfloat3/source/i64_to_extF80M.c"
+#include "mame/lib/softfloat3/source/i64_to_f128.c"
+#include "mame/lib/softfloat3/source/i64_to_f128M.c"
+#include "mame/lib/softfloat3/source/f16_to_ui32.c"
+#include "mame/lib/softfloat3/source/f16_to_ui64.c"
+#include "mame/lib/softfloat3/source/f16_to_i32.c"
+#include "mame/lib/softfloat3/source/f16_to_i64.c"
+#include "mame/lib/softfloat3/source/f16_to_ui32_r_minMag.c"
+#include "mame/lib/softfloat3/source/f16_to_ui64_r_minMag.c"
+#include "mame/lib/softfloat3/source/f16_to_i32_r_minMag.c"
+#include "mame/lib/softfloat3/source/f16_to_i64_r_minMag.c"
+#include "mame/lib/softfloat3/source/f16_to_f32.c"
+#include "mame/lib/softfloat3/source/f16_to_f64.c"
+#include "mame/lib/softfloat3/source/f16_to_extF80.c"
+#include "mame/lib/softfloat3/source/f16_to_extF80M.c"
+#include "mame/lib/softfloat3/source/f16_to_f128.c"
+#include "mame/lib/softfloat3/source/f16_to_f128M.c"
+#include "mame/lib/softfloat3/source/f16_roundToInt.c"
+#include "mame/lib/softfloat3/source/f16_add.c"
+#include "mame/lib/softfloat3/source/f16_sub.c"
+#include "mame/lib/softfloat3/source/f16_mul.c"
+#include "mame/lib/softfloat3/source/f16_mulAdd.c"
+#include "mame/lib/softfloat3/source/f16_div.c"
+#include "mame/lib/softfloat3/source/f16_rem.c"
+#include "mame/lib/softfloat3/source/f16_sqrt.c"
+#include "mame/lib/softfloat3/source/f16_eq.c"
+#include "mame/lib/softfloat3/source/f16_le.c"
+#include "mame/lib/softfloat3/source/f16_lt.c"
+#include "mame/lib/softfloat3/source/f16_eq_signaling.c"
+#include "mame/lib/softfloat3/source/f16_le_quiet.c"
+#include "mame/lib/softfloat3/source/f16_lt_quiet.c"
+#include "mame/lib/softfloat3/source/f16_isSignalingNaN.c"
+#include "mame/lib/softfloat3/source/f32_to_ui32.c"
+#include "mame/lib/softfloat3/source/f32_to_ui64.c"
+#include "mame/lib/softfloat3/source/f32_to_i32.c"
+#include "mame/lib/softfloat3/source/f32_to_i64.c"
+#include "mame/lib/softfloat3/source/f32_to_ui32_r_minMag.c"
+#include "mame/lib/softfloat3/source/f32_to_ui64_r_minMag.c"
+#include "mame/lib/softfloat3/source/f32_to_i32_r_minMag.c"
+#include "mame/lib/softfloat3/source/f32_to_i64_r_minMag.c"
+#include "mame/lib/softfloat3/source/f32_to_f16.c"
+#include "mame/lib/softfloat3/source/f32_to_f64.c"
+#include "mame/lib/softfloat3/source/f32_to_extF80.c"
+#include "mame/lib/softfloat3/source/f32_to_extF80M.c"
+#include "mame/lib/softfloat3/source/f32_to_f128.c"
+#include "mame/lib/softfloat3/source/f32_to_f128M.c"
+#include "mame/lib/softfloat3/source/f32_roundToInt.c"
+#include "mame/lib/softfloat3/source/f32_add.c"
+#include "mame/lib/softfloat3/source/f32_sub.c"
+#include "mame/lib/softfloat3/source/f32_mul.c"
+#include "mame/lib/softfloat3/source/f32_mulAdd.c"
+#include "mame/lib/softfloat3/source/f32_div.c"
+#include "mame/lib/softfloat3/source/f32_rem.c"
+#include "mame/lib/softfloat3/source/f32_sqrt.c"
+#include "mame/lib/softfloat3/source/f32_eq.c"
+#include "mame/lib/softfloat3/source/f32_le.c"
+#include "mame/lib/softfloat3/source/f32_lt.c"
+#include "mame/lib/softfloat3/source/f32_eq_signaling.c"
+#include "mame/lib/softfloat3/source/f32_le_quiet.c"
+#include "mame/lib/softfloat3/source/f32_lt_quiet.c"
+#include "mame/lib/softfloat3/source/f32_isSignalingNaN.c"
+#include "mame/lib/softfloat3/source/f64_to_ui32.c"
+#include "mame/lib/softfloat3/source/f64_to_ui64.c"
+#include "mame/lib/softfloat3/source/f64_to_i32.c"
+#include "mame/lib/softfloat3/source/f64_to_i64.c"
+#include "mame/lib/softfloat3/source/f64_to_ui32_r_minMag.c"
+#include "mame/lib/softfloat3/source/f64_to_ui64_r_minMag.c"
+#include "mame/lib/softfloat3/source/f64_to_i32_r_minMag.c"
+#include "mame/lib/softfloat3/source/f64_to_i64_r_minMag.c"
+#include "mame/lib/softfloat3/source/f64_to_f16.c"
+#include "mame/lib/softfloat3/source/f64_to_f32.c"
+#include "mame/lib/softfloat3/source/f64_to_extF80.c"
+#include "mame/lib/softfloat3/source/f64_to_extF80M.c"
+#include "mame/lib/softfloat3/source/f64_to_f128.c"
+#include "mame/lib/softfloat3/source/f64_to_f128M.c"
+#include "mame/lib/softfloat3/source/f64_roundToInt.c"
+#include "mame/lib/softfloat3/source/f64_add.c"
+#include "mame/lib/softfloat3/source/f64_sub.c"
+#include "mame/lib/softfloat3/source/f64_mul.c"
+#include "mame/lib/softfloat3/source/f64_mulAdd.c"
+#include "mame/lib/softfloat3/source/f64_div.c"
+#include "mame/lib/softfloat3/source/f64_rem.c"
+#include "mame/lib/softfloat3/source/f64_sqrt.c"
+#include "mame/lib/softfloat3/source/f64_eq.c"
+#include "mame/lib/softfloat3/source/f64_le.c"
+#include "mame/lib/softfloat3/source/f64_lt.c"
+#include "mame/lib/softfloat3/source/f64_eq_signaling.c"
+#include "mame/lib/softfloat3/source/f64_le_quiet.c"
+#include "mame/lib/softfloat3/source/f64_lt_quiet.c"
+#include "mame/lib/softfloat3/source/f64_isSignalingNaN.c"
+#include "mame/lib/softfloat3/source/extF80_to_ui32.c"
+#include "mame/lib/softfloat3/source/extF80_to_ui64.c"
+#include "mame/lib/softfloat3/source/extF80_to_i32.c"
+#include "mame/lib/softfloat3/source/extF80_to_i64.c"
+#include "mame/lib/softfloat3/source/extF80_to_ui32_r_minMag.c"
+#include "mame/lib/softfloat3/source/extF80_to_ui64_r_minMag.c"
+#include "mame/lib/softfloat3/source/extF80_to_i32_r_minMag.c"
+#include "mame/lib/softfloat3/source/extF80_to_i64_r_minMag.c"
+#include "mame/lib/softfloat3/source/extF80_to_f16.c"
+#include "mame/lib/softfloat3/source/extF80_to_f32.c"
+#include "mame/lib/softfloat3/source/extF80_to_f64.c"
+#include "mame/lib/softfloat3/source/extF80_to_f128.c"
+#include "mame/lib/softfloat3/source/extF80_roundToInt.c"
+#include "mame/lib/softfloat3/source/extF80_add.c"
+#include "mame/lib/softfloat3/source/extF80_sub.c"
+#include "mame/lib/softfloat3/source/extF80_mul.c"
+#include "mame/lib/softfloat3/source/extF80_div.c"
+#include "mame/lib/softfloat3/source/extF80_rem.c"
+#include "mame/lib/softfloat3/source/extF80_sqrt.c"
+#include "mame/lib/softfloat3/source/extF80_eq.c"
+#include "mame/lib/softfloat3/source/extF80_le.c"
+#include "mame/lib/softfloat3/source/extF80_lt.c"
+#include "mame/lib/softfloat3/source/extF80_eq_signaling.c"
+#include "mame/lib/softfloat3/source/extF80_le_quiet.c"
+#include "mame/lib/softfloat3/source/extF80_lt_quiet.c"
+#include "mame/lib/softfloat3/source/extF80_isSignalingNaN.c"
+#include "mame/lib/softfloat3/source/extF80M_to_ui32.c"
+#include "mame/lib/softfloat3/source/extF80M_to_ui64.c"
+#include "mame/lib/softfloat3/source/extF80M_to_i32.c"
+#include "mame/lib/softfloat3/source/extF80M_to_i64.c"
+#include "mame/lib/softfloat3/source/extF80M_to_ui32_r_minMag.c"
+#include "mame/lib/softfloat3/source/extF80M_to_ui64_r_minMag.c"
+#include "mame/lib/softfloat3/source/extF80M_to_i32_r_minMag.c"
+#include "mame/lib/softfloat3/source/extF80M_to_i64_r_minMag.c"
+#include "mame/lib/softfloat3/source/extF80M_to_f16.c"
+#include "mame/lib/softfloat3/source/extF80M_to_f32.c"
+#include "mame/lib/softfloat3/source/extF80M_to_f64.c"
+#include "mame/lib/softfloat3/source/extF80M_to_f128M.c"
+#include "mame/lib/softfloat3/source/extF80M_roundToInt.c"
+#include "mame/lib/softfloat3/source/extF80M_add.c"
+#include "mame/lib/softfloat3/source/extF80M_sub.c"
+#include "mame/lib/softfloat3/source/extF80M_mul.c"
+#include "mame/lib/softfloat3/source/extF80M_div.c"
+#include "mame/lib/softfloat3/source/extF80M_rem.c"
+#include "mame/lib/softfloat3/source/extF80M_sqrt.c"
+#include "mame/lib/softfloat3/source/extF80M_eq.c"
+#include "mame/lib/softfloat3/source/extF80M_le.c"
+#include "mame/lib/softfloat3/source/extF80M_lt.c"
+#include "mame/lib/softfloat3/source/extF80M_eq_signaling.c"
+#include "mame/lib/softfloat3/source/extF80M_le_quiet.c"
+#include "mame/lib/softfloat3/source/extF80M_lt_quiet.c"
+#include "mame/lib/softfloat3/source/f128_to_ui32.c"
+#include "mame/lib/softfloat3/source/f128_to_ui64.c"
+#include "mame/lib/softfloat3/source/f128_to_i32.c"
+#include "mame/lib/softfloat3/source/f128_to_i64.c"
+#include "mame/lib/softfloat3/source/f128_to_ui32_r_minMag.c"
+#include "mame/lib/softfloat3/source/f128_to_ui64_r_minMag.c"
+#include "mame/lib/softfloat3/source/f128_to_i32_r_minMag.c"
+#include "mame/lib/softfloat3/source/f128_to_i64_r_minMag.c"
+#include "mame/lib/softfloat3/source/f128_to_f16.c"
+#include "mame/lib/softfloat3/source/f128_to_f32.c"
+#include "mame/lib/softfloat3/source/f128_to_extF80.c"
+#include "mame/lib/softfloat3/source/f128_to_f64.c"
+#include "mame/lib/softfloat3/source/f128_roundToInt.c"
+#include "mame/lib/softfloat3/source/f128_add.c"
+#include "mame/lib/softfloat3/source/f128_sub.c"
+#include "mame/lib/softfloat3/source/f128_mul.c"
+#include "mame/lib/softfloat3/source/f128_mulAdd.c"
+#include "mame/lib/softfloat3/source/f128_div.c"
+#include "mame/lib/softfloat3/source/f128_rem.c"
+#include "mame/lib/softfloat3/source/f128_sqrt.c"
+#include "mame/lib/softfloat3/source/f128_eq.c"
+#include "mame/lib/softfloat3/source/f128_le.c"
+#include "mame/lib/softfloat3/source/f128_lt.c"
+#include "mame/lib/softfloat3/source/f128_eq_signaling.c"
+#include "mame/lib/softfloat3/source/f128_le_quiet.c"
+#include "mame/lib/softfloat3/source/f128_lt_quiet.c"
+#include "mame/lib/softfloat3/source/f128_isSignalingNaN.c"
+#include "mame/lib/softfloat3/source/f128M_to_ui32.c"
+#include "mame/lib/softfloat3/source/f128M_to_ui64.c"
+#include "mame/lib/softfloat3/source/f128M_to_i32.c"
+#include "mame/lib/softfloat3/source/f128M_to_i64.c"
+#include "mame/lib/softfloat3/source/f128M_to_ui32_r_minMag.c"
+#include "mame/lib/softfloat3/source/f128M_to_ui64_r_minMag.c"
+#include "mame/lib/softfloat3/source/f128M_to_i32_r_minMag.c"
+#include "mame/lib/softfloat3/source/f128M_to_i64_r_minMag.c"
+#include "mame/lib/softfloat3/source/f128M_to_f16.c"
+#include "mame/lib/softfloat3/source/f128M_to_f32.c"
+#include "mame/lib/softfloat3/source/f128M_to_extF80M.c"
+#include "mame/lib/softfloat3/source/f128M_to_f64.c"
+#include "mame/lib/softfloat3/source/f128M_roundToInt.c"
+#include "mame/lib/softfloat3/source/f128M_add.c"
+#include "mame/lib/softfloat3/source/f128M_sub.c"
+#include "mame/lib/softfloat3/source/f128M_mul.c"
+#include "mame/lib/softfloat3/source/f128M_mulAdd.c"
+#include "mame/lib/softfloat3/source/f128M_div.c"
+#include "mame/lib/softfloat3/source/f128M_rem.c"
+#include "mame/lib/softfloat3/source/f128M_sqrt.c"
+#include "mame/lib/softfloat3/source/f128M_eq.c"
+#include "mame/lib/softfloat3/source/f128M_le.c"
+#include "mame/lib/softfloat3/source/f128M_lt.c"
+#include "mame/lib/softfloat3/source/f128M_eq_signaling.c"
+#include "mame/lib/softfloat3/source/f128M_le_quiet.c"
+#include "mame/lib/softfloat3/source/f128M_lt_quiet.c"
+#include "mame/lib/softfloat3/bochs_ext/f2xm1.c"
+#include "mame/lib/softfloat3/bochs_ext/fpatan.c"
+#include "mame/lib/softfloat3/bochs_ext/fprem.c"
+#include "mame/lib/softfloat3/bochs_ext/fsincos.c"
+#include "mame/lib/softfloat3/bochs_ext/fyl2x.c"
+#include "mame/lib/softfloat3/bochs_ext/poly.c"
+#include "mame/lib/softfloat3/bochs_ext/extF80_scale.c"
+#include "mame/lib/softfloat3/bochs_ext/isNaN.c"
+
+#if defined(_MSC_VER) && (_MSC_VER == 1200)
+#pragma optimize("g", on)
+#endif
+
+#else
+
+#include "mame/lib/softfloat/softfloat.c"
+#include "mame/lib/softfloat/fsincos.c"
+#include "mame/lib/softfloat/fpatan.c"
+#include "mame/lib/softfloat/f2xm1.c"
+#include "mame/lib/softfloat/fyl2x.c"
+
+#endif
+
+#include "mame/emu/cpu/i386/i386.c"
+#include "mame/emu/cpu/vtlb.c"
+
+#undef CPU_INIT
+#undef CPU_RESET
+#undef CPU_EXECUTE
+
+#ifdef USE_DEBUGGER
+#include "mame/emu/cpu/i386/i386dasm.c"
+
+#undef CPU_DISASSEMBLE
+
+int CPU_DISASSEMBLE(UINT8 *oprom, offs_t eip, bool is_ia32, char *buffer, size_t buffer_len)
+{
+	if(is_ia32) {
+		return CPU_DISASSEMBLE_CALL(x86_32) & DASMFLAG_LENGTHMASK;
+	} else {
+		return CPU_DISASSEMBLE_CALL(x86_16) & DASMFLAG_LENGTHMASK;
+	}
+}
+#endif
+
+#define CPU_EAX				REG32(EAX)
+#define CPU_ECX				REG32(ECX)
+#define CPU_EDX				REG32(EDX)
+#define CPU_EBX				REG32(EBX)
+#define CPU_ESP				REG32(ESP)
+#define CPU_EBP				REG32(EBP)
+#define CPU_ESI				REG32(ESI)
+#define CPU_EDI				REG32(EDI)
+
+#define CPU_AX				REG16(AX)
+#define CPU_CX				REG16(CX)
+#define CPU_DX				REG16(DX)
+#define CPU_BX				REG16(BX)
+#define CPU_SP				REG16(SP)
+#define CPU_BP				REG16(BP)
+#define CPU_SI				REG16(SI)
+#define CPU_DI				REG16(DI)
+
+#define CPU_AL				REG8(AL)
+#define CPU_CL				REG8(CL)
+#define CPU_DL				REG8(DL)
+#define CPU_BL				REG8(BL)
+#define CPU_AH				REG8(AH)
+#define CPU_CH				REG8(CH)
+#define CPU_DH				REG8(DH)
+#define CPU_BH				REG8(BH)
+
+#define CPU_ES				m_sreg[ES].selector
+#define CPU_CS				m_sreg[CS].selector
+#define CPU_SS				m_sreg[SS].selector
+#define CPU_DS				m_sreg[DS].selector
+#define CPU_FS				m_sreg[FS].selector
+#define CPU_GS				m_sreg[GS].selector
+
+#ifdef USE_DEBUGGER
+#define CPU_PREV_CS			m_prev_cs
+#endif
+
+#define CPU_ES_BASE			m_sreg[ES].base
+#define CPU_CS_BASE			m_sreg[CS].base
+#define CPU_SS_BASE			m_sreg[SS].base
+#define CPU_DS_BASE			m_sreg[DS].base
+#define CPU_FS_BASE			m_sreg[FS].base
+#define CPU_GS_BASE			m_sreg[GS].base
+
+#define CPU_ES_INDEX			ES
+#define CPU_CS_INDEX			CS
+#define CPU_SS_INDEX			SS
+#define CPU_DS_INDEX			DS
+#define CPU_FS_INDEX			FS
+#define CPU_GS_INDEX			GS
+
+inline void CPU_LOAD_SREG(UINT8 reg, UINT16 selector)
+{
+	i386_sreg_load(selector, reg, NULL);
+}
+
+#define CPU_EIP_CHANGED			(m_eip != m_prev_eip)
+#define CPU_EIP				m_eip
+#define CPU_PREV_EIP			m_prev_eip
+
+inline void CPU_SET_EIP(UINT32 value)
+{
+	m_eip = value;
+	CHANGE_PC(m_eip);
+}
+
+inline void CPU_INC_EIP(UINT32 value)
+{
+	m_eip += value;
+	CHANGE_PC(m_pc);
+}
+
+#define CPU_GDTR_LIMIT			m_gdtr.limit
+#define CPU_GDTR_BASE			m_gdtr.base
+#define CPU_IDTR_LIMIT			m_idtr.limit
+#define CPU_IDTR_BASE			m_idtr.base
+
+#define CPU_MSW				m_cr[0]
+
+#define CPU_CR0				m_cr[0]
+#define CPU_CR1				m_cr[1]
+#define CPU_CR2				m_cr[2]
+#define CPU_CR3				m_cr[3]
+#define CPU_CR4				m_cr[4]
+
+#define	CPU_CR0_PE			(1 << 0)
+#define	CPU_CR0_PG			(1 << 31)
+
+#define CPU_DR(x)			m_dr[x]
+
+#define CPU_C_FLAG			(m_CF != 0)
+#define CPU_P_FLAG			(m_PF != 0)
+#define CPU_A_FLAG			(m_AF != 0)
+#define CPU_Z_FLAG			(m_ZF != 0)
+#define CPU_S_FLAG			(m_SF != 0)
+#define CPU_I_FLAG			(m_IF != 0)
+#define CPU_D_FLAG			(m_DF != 0)
+#define CPU_O_FLAG			(m_OF != 0)
+
+#if defined(SUPPORT_FPU)
+#define FPU_CTRLWORD			m_x87_cw
+#define FPU_STATUSWORD			m_x87_sw
+#define FPU_TAGWORD			m_x87_tw
+#define FPU_INSTPTR_OFFSET		m_x87_inst_ptr
+#define FPU_INSTPTR_SEG			m_x87_cs
+#define FPU_DATAPTR_OFFSET		m_x87_data_ptr
+#define FPU_DATAPTR_SEG			m_x87_ds
+
+UINT8 FPU_REG(int n, int i)
+{
+#ifdef SUPPORT_FPU_SOFTFLOAT3
+	switch(i) {
+	case 0: return (m_x87_reg[n].signif  >>  0) & 0xff;
+	case 1: return (m_x87_reg[n].signif  >>  8) & 0xff;
+	case 2: return (m_x87_reg[n].signif  >> 16) & 0xff;
+	case 3: return (m_x87_reg[n].signif  >> 24) & 0xff;
+	case 4: return (m_x87_reg[n].signif  >> 32) & 0xff;
+	case 5: return (m_x87_reg[n].signif  >> 40) & 0xff;
+	case 6: return (m_x87_reg[n].signif  >> 48) & 0xff;
+	case 7: return (m_x87_reg[n].signif  >> 56) & 0xff;
+	case 8: return (m_x87_reg[n].signExp >>  0) & 0xff;
+	case 9: return (m_x87_reg[n].signExp >>  8) & 0xff;
+	}
+#else
+	switch(i) {
+	case 0: return (m_x87_reg[n].low  >>  0) & 0xff;
+	case 1: return (m_x87_reg[n].low  >>  8) & 0xff;
+	case 2: return (m_x87_reg[n].low  >> 16) & 0xff;
+	case 3: return (m_x87_reg[n].low  >> 24) & 0xff;
+	case 4: return (m_x87_reg[n].low  >> 32) & 0xff;
+	case 5: return (m_x87_reg[n].low  >> 40) & 0xff;
+	case 6: return (m_x87_reg[n].low  >> 48) & 0xff;
+	case 7: return (m_x87_reg[n].low  >> 56) & 0xff;
+	case 8: return (m_x87_reg[n].high >>  0) & 0xff;
+	case 9: return (m_x87_reg[n].high >>  8) & 0xff;
+	}
+#endif
+	return 0;
+}
+
+void SET_FPU_REG(int n, int i, UINT8 val)
+{
+#ifdef SUPPORT_FPU_SOFTFLOAT3
+	switch(i) {
+	case 0: m_x87_reg[n].signif =  (m_x87_reg[n].signif  & ~((UINT64)0xff <<  0)) | ((UINT64)val <<  0); break;
+	case 1: m_x87_reg[n].signif =  (m_x87_reg[n].signif  & ~((UINT64)0xff <<  8)) | ((UINT64)val <<  8); break;
+	case 2: m_x87_reg[n].signif =  (m_x87_reg[n].signif  & ~((UINT64)0xff << 16)) | ((UINT64)val << 16); break;
+	case 3: m_x87_reg[n].signif =  (m_x87_reg[n].signif  & ~((UINT64)0xff << 24)) | ((UINT64)val << 24); break;
+	case 4: m_x87_reg[n].signif =  (m_x87_reg[n].signif  & ~((UINT64)0xff << 32)) | ((UINT64)val << 32); break;
+	case 5: m_x87_reg[n].signif =  (m_x87_reg[n].signif  & ~((UINT64)0xff << 40)) | ((UINT64)val << 40); break;
+	case 6: m_x87_reg[n].signif =  (m_x87_reg[n].signif  & ~((UINT64)0xff << 48)) | ((UINT64)val << 48); break;
+	case 7: m_x87_reg[n].signif =  (m_x87_reg[n].signif  & ~((UINT64)0xff << 56)) | ((UINT64)val << 56); break;
+	case 8: m_x87_reg[n].signExp = (m_x87_reg[n].signExp & ~((UINT16)0xff <<  0)) | ((UINT16)val <<  0); break;
+	case 9: m_x87_reg[n].signExp = (m_x87_reg[n].signExp & ~((UINT16)0xff <<  8)) | ((UINT16)val <<  8); break;
+	}
+#else
+	switch(i) {
+	case 0: m_x87_reg[n].low =  (m_x87_reg[n].low  & ~((UINT64)0xff <<  0)) | ((UINT64)val <<  0); break;
+	case 1: m_x87_reg[n].low =  (m_x87_reg[n].low  & ~((UINT64)0xff <<  8)) | ((UINT64)val <<  8); break;
+	case 2: m_x87_reg[n].low =  (m_x87_reg[n].low  & ~((UINT64)0xff << 16)) | ((UINT64)val << 16); break;
+	case 3: m_x87_reg[n].low =  (m_x87_reg[n].low  & ~((UINT64)0xff << 24)) | ((UINT64)val << 24); break;
+	case 4: m_x87_reg[n].low =  (m_x87_reg[n].low  & ~((UINT64)0xff << 32)) | ((UINT64)val << 32); break;
+	case 5: m_x87_reg[n].low =  (m_x87_reg[n].low  & ~((UINT64)0xff << 40)) | ((UINT64)val << 40); break;
+	case 6: m_x87_reg[n].low =  (m_x87_reg[n].low  & ~((UINT64)0xff << 48)) | ((UINT64)val << 48); break;
+	case 7: m_x87_reg[n].low =  (m_x87_reg[n].low  & ~((UINT64)0xff << 56)) | ((UINT64)val << 56); break;
+	case 8: m_x87_reg[n].high = (m_x87_reg[n].high & ~((UINT16)0xff <<  0)) | ((UINT16)val <<  0); break;
+	case 9: m_x87_reg[n].high = (m_x87_reg[n].high & ~((UINT16)0xff <<  8)) | ((UINT16)val <<  8); break;
+	}
+#endif
+}
+#endif
+
+inline void CPU_SET_C_FLAG(UINT8 value)
+{
+	m_CF = value;
+}
+
+inline void CPU_SET_P_FLAG(UINT8 value)
+{
+	m_PF = value;
+}
+
+inline void CPU_SET_A_FLAG(UINT8 value)
+{
+	m_AF = value;
+}
+
+inline void CPU_SET_Z_FLAG(UINT8 value)
+{
+	m_ZF = value;
+}
+
+inline void CPU_SET_S_FLAG(UINT8 value)
+{
+	m_SF = value;
+}
+
+inline void CPU_SET_T_FLAG(UINT8 value)
+{
+	m_TF = value;
+}
+
+inline void CPU_SET_I_FLAG(UINT8 value)
+{
+	m_IF = value;
+}
+
+inline void CPU_SET_D_FLAG(UINT8 value)
+{
+	m_DF = value;
+}
+
+inline void CPU_SET_O_FLAG(UINT8 value)
+{
+	m_OF = value;
+}
+
+inline void CPU_SET_IOP_FLAG(UINT8 value)
+{
+	m_IOP1 = (value     ) & 1;
+	m_IOP2 = (value >> 1) & 1;
+}
+
+inline void CPU_SET_NT_FLAG(UINT8 value)
+{
+	m_NT = value;
+}
+
+inline void CPU_SET_VM_FLAG(UINT8 value)
+{
+	m_VM = value;
+}
+
+inline void CPU_SET_CR0(UINT32 value)
+{
+	m_cr[0] = value;
+}
+
+inline void CPU_SET_CR3(UINT32 value)
+{
+	m_cr[3] = value;
+	vtlb_flush_dynamic(m_vtlb);
+}
+
+inline void CPU_SET_CPL(int value)
+{
+	m_CPL = value;
+}
+
+#define CPU_STAT_PM			PROTECTED_MODE
+#define CPU_STAT_VM86			V8086_MODE
+
+#define CPU_EFLAG			get_flags()
+#define CPU_SET_EFLAG(x)		set_flags(x)
+
+#define CPU_ADRSMASK			m_a20_mask
+
+#define CPU_A20_LINE(x)			i386_set_a20_line(x)
+
+inline void CPU_IRQ_LINE(int state)
+{
+	if(state) {
+		i386_set_irq_line(INPUT_LINE_IRQ, HOLD_LINE);
+	} else {
+		i386_set_irq_line(INPUT_LINE_IRQ, CLEAR_LINE);
+	}
+}
+
+#define CPU_INST_OP32			m_operand_size
+
+void CPU_INIT()
+{
+	CPU_INIT_CALL(CPU_MODEL);
+}
+
+void CPU_RELEASE()
+{
+	vtlb_free(m_vtlb);
+}
+
+void CPU_FINISH()
+{
+	CPU_RELEASE();
+}
+
+void CPU_RESET()
+{
+	CPU_RESET_CALL(CPU_MODEL);
+}
+
+void CPU_EXECUTE()
+{
+	CPU_EXECUTE_CALL(i386);
+}
+
+void CPU_SOFT_INTERRUPT(int irq)
+{
+	m_ext = 0; // not an external interrupt
+	i386_trap(irq, 1);
+	m_ext = 1;
+}
+
+void CPU_JMP_FAR(UINT16 selector, UINT32 address)
+{
+	if(PROTECTED_MODE && !V8086_MODE) {
+		i386_protected_mode_jump(selector, address, 1, m_operand_size);
+	} else {
+		m_sreg[CS].selector = selector;
+		m_performed_intersegment_jump = 1;
+		i386_load_segment_descriptor(CS);
+		m_eip = address;
+		CHANGE_PC(m_eip);
+	}
+}
+
+void CPU_CALL_FAR(UINT16 selector, UINT32 address)
+{
+	if(PROTECTED_MODE && !V8086_MODE) {
+		i386_protected_mode_call(selector, address, 1, m_operand_size);
+	} else {
+		PUSH16(m_sreg[CS].selector);
+		PUSH16(m_eip);
+		m_sreg[CS].selector = selector;
+		m_performed_intersegment_jump = 1;
+		i386_load_segment_descriptor(CS);
+		m_eip = address;
+		CHANGE_PC(m_eip);
+	}
+}
+
+void CPU_IRET()
+{
+	// Don't call msdos_syscall() in iret routine
+	m_pc = 1;
+	I386OP(iret16)();
+}
+
+void CPU_PUSH(UINT16 value)
+{
+	PUSH16(value);
+}
+
+UINT16 CPU_POP()
+{
+	return POP16();
+}
+
+void CPU_PUSHF()
+{
+	I386OP(pushf)();
+}
+
+UINT16 CPU_READ_STACK()
+{
+	UINT32 ea, new_esp;
+	if( STACK_32BIT ) {
+		new_esp = REG32(ESP) + 2;
+		ea = i386_translate(SS, new_esp - 2, 0, 2);
+	} else {
+		new_esp = REG16(SP) + 2;
+		ea = i386_translate(SS, (new_esp - 2) & 0xffff, 0, 2);
+	}
+	return READ16(ea);
+}
+
+void CPU_WRITE_STACK(UINT16 value)
+{
+	UINT32 ea, new_esp;
+	if( STACK_32BIT ) {
+		new_esp = REG32(ESP) + 2;
+		ea = i386_translate(SS, new_esp - 2, 0, 2);
+	} else {
+		new_esp = REG16(SP) + 2;
+		ea = i386_translate(SS, (new_esp - 2) & 0xffff, 0, 2);
+	}
+	WRITE16(ea, value);
+}
+
+void CPU_LOAD_LDTR(UINT16 selector)
+{
+	I386_SREG seg;
+	m_ldtr.segment = selector;
+	seg.selector = selector;
+	i386_load_protected_mode_segment(&seg, NULL);
+	m_ldtr.limit = seg.limit;
+	m_ldtr.base = seg.base;
+	m_ldtr.flags = seg.flags;
+}
+
+void CPU_LOAD_TR(UINT16 selector)
+{
+	I386_SREG seg;
+	m_task.segment = selector;
+	seg.selector = selector;
+	i386_load_protected_mode_segment(&seg, NULL);
+	m_task.limit = seg.limit;
+	m_task.base = seg.base;
+	m_task.flags = seg.flags;
+}
+
+UINT32 CPU_TRANS_PAGING_ADDR(UINT32 addr)
+{
+	translate_address(0, TR_READ, &addr, NULL);
+	return addr;
+}
+
+UINT32 CPU_TRANS_CODE_ADDR(UINT32 seg, UINT32 ofs)
+{
+	if(PROTECTED_MODE && !V8086_MODE) {
+		I386_SREG desc;
+		memset(&desc, 0, sizeof(desc));
+		desc.selector = seg;
+		i386_load_protected_mode_segment(&desc, NULL);
+		UINT32 addr = desc.base + ofs;
+		translate_address(m_CPL, TR_FETCH, &addr, NULL);
+		return addr;
+	}
+	return (seg << 4) + ofs;
+}
+
+#ifdef USE_DEBUGGER
+UINT32 CPU_GET_PREV_PC()
+{
+	UINT32 addr = m_prev_pc;
+	translate_address(m_CPL, TR_FETCH, &addr, NULL);
+	return addr;
+}
+
+UINT32 CPU_GET_NEXT_PC()
+{
+	UINT32 addr = m_pc;
+	translate_address(m_CPL, TR_FETCH, &addr, NULL);
+	return addr;
+}
+#endif
